@@ -1,8 +1,6 @@
+const mongoose = require('mongoose');
 const Card = require('../models/card');
-
-const ERROR_BAD_REQUEST = 400;
-const ERROR_NOT_FOUND = 404;
-const ERROR_INTERNAL_SERVER = 500;
+const { ERROR_BAD_REQUEST, ERROR_NOT_FOUND, ERROR_INTERNAL_SERVER } = require('../utils/utils');
 
 module.exports.doesCardExist = (req, res, next) => {
   Card.findById(req.params.cardId)
@@ -15,6 +13,13 @@ module.exports.doesCardExist = (req, res, next) => {
     });
 };
 
+module.exports.isCardIdValid = (req, res, next) => {
+  if (!mongoose.isValidObjectId(req.params.cardId)) {
+    res.status(ERROR_BAD_REQUEST).send({ message: 'Невалидный ID карточки' });
+  }
+  next();
+};
+
 module.exports.createCard = (req, res) => {
   const ownerId = req.user._id;
   const { name, link } = req.body;
@@ -22,7 +27,7 @@ module.exports.createCard = (req, res) => {
   Card.create({ name, link, owner: ownerId })
     .then((card) => res.send({ data: card }))
     .catch((err) => {
-      if (err._message === 'card validation failed') {
+      if (err.name === 'ValidationError') {
         res.status(ERROR_BAD_REQUEST).send({ message: 'Данные неполные или заполнены некорректно' });
       } else {
         res.status(ERROR_INTERNAL_SERVER).send({ message: 'Не удалось создать карточку' });

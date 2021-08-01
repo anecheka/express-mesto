@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const userRouter = require('./routes/users');
 const cardRouter = require('./routes/cards');
+const { ERROR_NOT_FOUND } = require('./utils/utils');
 
 const { PORT = 3000 } = process.env;
 
@@ -26,6 +27,9 @@ app.use((req, res, next) => {
 
 app.use('/users', userRouter);
 app.use('/cards', cardRouter);
+app.use((req, res) => {
+  res.status(ERROR_NOT_FOUND).send({ message: 'Запрошенный роут не существует' });
+});
 
 app.listen(PORT, () => {
   console.log(`App listening on port ${PORT}`);
