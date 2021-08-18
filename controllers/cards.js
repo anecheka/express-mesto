@@ -1,26 +1,29 @@
 const mongoose = require('mongoose');
 const Card = require('../models/card');
-const { ERROR_BAD_REQUEST, ERROR_NOT_FOUND, ERROR_INTERNAL_SERVER } = require('../utils/utils');
+const NotFoundError = require('../errors/not-found-err');
+const BadRequestError = require('../errors/bad-request-err');
+const ForbiddenError = require('../errors/forbidden-err');
+const InternalServerError = require('../errors/internal-server-err');
 
 module.exports.doesCardExist = (req, res, next) => {
   Card.findById(req.params.cardId)
     .then((card) => {
       if (!card) {
-        res.status(ERROR_NOT_FOUND).send({ message: 'Карточки с таким ID не существует' });
-        return;
+        throw new NotFoundError('Карточки с таким ID не существует');
       }
       next();
-    });
+    })
+    .catch(next);
 };
 
 module.exports.isCardIdValid = (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.cardId)) {
-    res.status(ERROR_BAD_REQUEST).send({ message: 'Невалидный ID карточки' });
+    throw new BadRequestError('Невалидный ID карточки');
   }
   next();
 };
 
-module.exports.createCard = (req, res) => {
+module.exports.createCard = (req, res, next) => {
   const ownerId = req.user._id;
   const { name, link } = req.body;
 
@@ -28,47 +31,56 @@ module.exports.createCard = (req, res) => {
     .then((card) => res.send({ data: card }))
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        res.status(ERROR_BAD_REQUEST).send({ message: 'Данные неполные или заполнены некорректно' });
+        next(new BadRequestError('Данные неполные или заполнены некорректно'));
       } else {
-        res.status(ERROR_INTERNAL_SERVER).send({ message: 'Не удалось создать карточку' });
+        next(err);
       }
     });
 };
 
-module.exports.deleteCard = (req, res) => {
-  Card.findByIdAndRemove(req.params.cardId)
-    .then((card) => res.send({ data: card }))
-    .catch(() => res.status(ERROR_INTERNAL_SERVER).send({ message: 'Не удалось удалить карточку с таким ID' }));
+module.exports.deleteCard = (req, res, next) => {
+  const ownerId = req.user._id;
+
+  Card.findById(req.params.cardId)
+    .then((card) => {
+      if (card.owner.equals(ownerId)) {
+        Card.deleteOne({ _id: card._id }, (err) => {
+          if (err) {
+            next(new InternalServerError('Проблема с удалением карточки'));
+          }
+          res.send({ data: card });
+        });
+      } else {
+        next(new ForbiddenError('Недостаточно прав для удаления данной карточки'));
+      }
+    })
+    .catch(next);
 };
 
-module.exports.getAllCards = (req, res) => {
+module.exports.getAllCards = (req, res, next) => {
   Card.find({})
     .then((card) => {
       res.send({ data: card });
     })
-    .catch(() => res.status(ERROR_INTERNAL_SERVER).send({ message: 'Не удалось загрузить список карточек' }));
+    .catch(next);
 };
 
-module.exports.likeCard = (req, res) => {
+module.exports.likeCard = (req, res, next) => {
   Card.findByIdAndUpdate(
     req.params.cardId,
     { $addToSet: { likes: req.user._id } },
     { new: true },
   )
     .then((card) => res.send({ data: card }))
-    .catch(() => {
-      res.status(ERROR_INTERNAL_SERVER).send({ message: 'Не удалось обновить количество лайков' });
-    });
+    .catch(next);
 };
 
-module.exports.dislikeCard = (req, res) => {
+module.exports.dislikeCard = (req, res, next) => {
   Card.findByIdAndUpdate(
     req.params.cardId,
     { $pull: { likes: req.user._id } },
     { new: true },
   )
     .then((card) => res.send({ data: card }))
-    .catch(() => {
-      res.status(ERROR_INTERNAL_SERVER).send({ message: 'Не удалось обновить количество лайков' });
-    });
+    .catch(next);
 };
