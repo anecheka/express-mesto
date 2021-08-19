@@ -6,6 +6,8 @@ const BadRequestError = require('../errors/bad-request-err');
 const ConflictError = require('../errors/conflict-err');
 const UnauthorizedError = require('../errors/unauthorized-err');
 
+const { NODE_ENV, JWT_KEY } = process.env;
+
 module.exports.createUser = (req, res, next) => {
   const {
     name, about, avatar,
@@ -21,7 +23,7 @@ module.exports.createUser = (req, res, next) => {
     }))
     .then((user) => {
       if (isEmail(req.body.email)) {
-        res.send(user);
+        res.send({ user: user.toJSON() });
       } else {
         throw new BadRequestError('Неправильный формат email');
       }
@@ -95,7 +97,11 @@ module.exports.login = (req, res, next) => {
 
   User.findUserByCredentials(email, password)
     .then((user) => {
-      const token = jwt.sign({ _id: user._id }, 'some-secret-key', { expiresIn: '7d' });
+      const token = jwt.sign(
+        { _id: user._id },
+        NODE_ENV === 'production' ? JWT_KEY : 'dev-secret',
+        { expiresIn: '7d' },
+      );
 
       res
         .cookie('jwt', token, {
